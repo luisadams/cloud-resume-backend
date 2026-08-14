@@ -12,15 +12,15 @@ PARTITION_KEY = "resume"
 ROW_KEY = "counter"
 
 
-@app.route(route="visitorcounter", methods=["GET"])
-def VisitorCounter(req: func.HttpRequest) -> func.HttpResponse:
-    logging.info("VisitorCounter function triggered.")
+def increment_and_get_count(table_client):
+    """
+    Core business logic: read the current count from the table,
+    increment it by 1, save it back, and return the new count.
 
-    connection_string = os.environ["TABLE_CONNECTION_STRING"]
-
-    table_service = TableServiceClient.from_connection_string(connection_string)
-    table_client = table_service.get_table_client(TABLE_NAME)
-
+    Separated from the HTTP handler so it can be tested without
+    needing a real HTTP request or a real Azure connection —
+    tests can pass in a fake/mock table_client instead.
+    """
     try:
         entity = table_client.get_entity(partition_key=PARTITION_KEY, row_key=ROW_KEY)
         new_count = entity["count"] + 1
@@ -34,6 +34,20 @@ def VisitorCounter(req: func.HttpRequest) -> func.HttpResponse:
             "count": new_count,
         }
         table_client.create_entity(entity)
+
+    return new_count
+
+
+@app.route(route="visitorcounter", methods=["GET"])
+def VisitorCounter(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info("VisitorCounter function triggered.")
+
+    connection_string = os.environ["TABLE_CONNECTION_STRING"]
+
+    table_service = TableServiceClient.from_connection_string(connection_string)
+    table_client = table_service.get_table_client(TABLE_NAME)
+
+    new_count = increment_and_get_count(table_client)
 
     response_body = json.dumps({"count": new_count})
 
